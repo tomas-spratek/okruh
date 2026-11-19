@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Závodní Okruh - Tomáš Spratek EL2</title>
+    <!-- Načtení Three.js přes CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&display=swap');
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Chakra Petch', sans-serif;
+            background-color: #111;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* HUD Rozhraní */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 12px 20px;
+            color: #fff;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .lap-stats {
+            display: flex;
+            gap: 24px;
+        }
+
+        .stat-box {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #94a3b8;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .stat-value.highlight {
+            color: #38bdf8;
+        }
+
+        .stat-value.best {
+            color: #4ade80;
+        }
+
+        .controls-help {
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: #cbd5e1;
+        }
+
+        .key {
+            display: inline-block;
+            background: #334155;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-weight: 700;
+            color: #fff;
+            font-size: 0.75rem;
+            box-shadow: 0 2px 0 #1e293b;
+        }
+
+        .hud-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        /* Tachometr */
+        .speedometer {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            border-left: 4px solid #ef4444;
+        }
+
+        #speed-value {
+            font-size: 3.2rem;
+            font-weight: 700;
+            font-style: italic;
+            line-height: 1;
+            color: #fff;
+            text-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+        }
+
+        .speed-unit {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #ef4444;
+        }
+
+        /* Notifikace uprostřed (např. Nové kolo, Rekord) */
+        #notification {
+            position: absolute;
+            top: 25%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(185, 28, 28, 0.9));
+            color: white;
+            padding: 12px 30px;
+            border-radius: 30px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            text-align: center;
+        }
+
+        #notification.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        /* Dotykové ovládání pro mobilní zařízení */
+        #touch-controls {
+            display: none;
+            pointer-events: auto;
+            gap: 10px;
+        }
+
+        .touch-btn {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            color: white;
+            font-size: 1.2rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            touch-action: manipulation;
+        }
+
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(239, 68, 68, 0.7);
+            border-color: #fff;
+            transform: scale(0.95);
+        }
+
+        .touch-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .controls-help {
+                display: none;
+            }
+            #touch-controls {
+                display: flex;
+                width: 100%;
+                justify-content: space-between;
+                margin-bottom: 10px;
+            }
+            .hud-bottom {
+                flex-direction: column-reverse;
+                align-items: stretch;
+                gap: 15px;
+            }
+            .speedometer {
+                align-self: flex-end;
+                padding: 8px 15px;
+            }
+            #speed-value {
+                font-size: 2.2rem;
+            }
+            .lap-stats {
+                gap: 12px;
+            }
+            .stat-value {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="hud">
+        <div class="hud-top">
+            <!-- Statistiky kol a časů -->
+            <div class="panel lap-stats">
+                <div class="stat-box">
+                    <span class="stat-label">Kolo</span>
+                    <span class="stat-value highlight" id="lap-count">1</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Aktuální čas</span>
+                    <span class="stat-value" id="current-time">00:00.00</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Nejlepší čas</span>
+                    <span class="stat-value best" id="best-time">--:--.--</span>
+                </div>
+            </div>
+
+            <!-- Nápověda k ovládání -->
+            <div class="panel controls-help">
+                <div><span class="key">W</span> / <span class="key">↑</span> Plyn &nbsp;|&nbsp; <span class="key">S</span> / <span class="key">↓</span> Brzda / Couvání</div>
+                <div><span class="key">A</span> <span class="key">D</span> / <span class="key">←</span> <span class="key">→</span> Zatáčení</div>
+                <div><span class="key">Mezerník</span> Ruční brzda &nbsp;|&nbsp; <span class="key">R</span> Reset auta</div>
+            </div>
+        </div>
+
+        <!-- Zpráva uprostřed obrazovky -->
+        <div id="notification">Nové kolo!</div>
+
+        <div class="hud-bottom">
+            <!-- Dotyková tlačítka (zobrazí se na mobilech) -->
+            <div id="touch-controls">
+                <div class="touch-group">
+                    <button class="touch-btn" id="btn-left">◀</button>
+                    <button class="touch-btn" id="btn-right">▶</button>
+                </div>
+                <div class="touch-group">
+                    <button class="touch-btn" id="btn-reset" style="font-size: 0.9rem;">R</button>
+                    <button class="touch-btn" id="btn-brake" style="background: rgba(239, 68, 68, 0.3);">S</button>
+                    <button class="touch-btn" id="btn-gas" style="background: rgba(34, 197, 94, 0.3);">W</button>
+                </div>
+            </div>
+
+            <!-- Tachometr -->
+            <div class="panel speedometer">
+                <span id="speed-value">0</span>
+                <span class="speed-unit">KM/H</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /**
+     * 3D ZÁVODNÍ HRA - THREE.JS
+     * Kompletní logika scény, generování uzavřeného okruhu, fyzika vozidla a HUD.
+     */
+
+    // --- GLOBÁLNÍ PROMĚNNÉ ---
+    let scene, camera, renderer;
+    let carGroup, frontLeftWheelPivot, frontRightWheelPivot;
+    let wheelMeshes = [];
+    
+    // Parametry okruhu
+    let trackCurve;
+    const TRACK_WIDTH = 16;
+    const TRACK_SEGMENTS = 300;
+    let trackPoints = []; // Uložené body okruhu pro výpočet vzdálenosti a checkpointů
+
+    // Fyzika a stav vozidla
+    const carState = {
+        position: new THREE.Vector3(0, 0, 0),
+        heading: 0,           // Úhel natočení auta v radiánech
+        speed: 0,             // Aktuální rychlost (jednotky/s)
+        steeringAngle: 0,     // Úhel natočení předních kol
+        maxSpeed: 68,         // Maximální rychlost (~245 km/h)
+        maxReverseSpeed: -22, // Maximální rychlost couvání
+        acceleration: 32,     // Zrychlení
+        braking: 55,          // Síla brzd
+        friction: 10,         // Přirozený odpor vzduchu a valení
+        offRoadFriction: 28,  // Zpomalení na trávě
+        turnSpeed: 2.3,       // Rychlost zatáčení
+        handbrakeActive: false
+    };
+
+    // Ovládání
+    const keys = {
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        handbrake: false
+    };
+
+    // Časomíra a kola
+    const raceState = {
+        lap: 1,
+        lapStartTime: 0,
+        bestLapTime: null,
+        passedCheckpoint1: false,
+        passedCheckpoint2: false,
+        lastProgress: 0
+    };
+
+    // Kamera (plynulé sledování)
+    const cameraCurrentPos = new THREE.Vector3();
+    const cameraCurrentLookAt = new THREE.Vector3();
+
+    // Časovač pro deltaTime
+    const clock = new THREE.Clock();
+
+    // --- INICIALIZACE SCÉNY ---
+    function init() {
+        const container = document.getElementById('game-container');
+
+        // 1. Scéna a mlha (atmosféra)
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); // Jasná modrá obloha
+        scene.fog = new THREE.FogExp2(0x87ceeb, 0.0022);
+
+        // 2. Kamera
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        // 3. Renderer se stíny
+        renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.insertBefore(renderer.domElement, container.firstChild);
+
+        // 4. Osvětlení
+        setupLighting();
+
+        // 5. Prostředí a závodní okruh
+        createEnvironment();
+        createTrack();
+
+        // 6. Vytvoření 3D modelu auta
+        createCar();
+
+        // 7. Umístění auta na start
+        resetCarToStart();
+
+        // 8. Události (klávesnice, dotyk, změna velikosti okna)
+        setupInputs();
+        window.addEventListener('resize', onWindowResize, false);
+
+        // Spuštění časomíry prvního kola
+        raceState.lapStartTime = performance.now();
+    }
+
+    // --- OSVĚTLENÍ ---
+    function setupLighting() {
+        // Ambientní světlo pro jemné prosvětlení stínů
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+        scene.add(ambientLight);
+
+        // Sluneční světlo vrhané ze strany se stíny
+        const sunLight = new THREE.DirectionalLight(0xfff5e6, 0.95);
+        sunLight.position.set(120, 180, 90);
+        sunLight.castShadow = true;
+
+        // Nastavení oblasti stínů tak, aby pokryla velkou část okruhu
+        const d = 220;
+        sunLight.shadow.camera.left = -d;
+        sunLight.shadow.camera.right = d;
+        sunLight.shadow.camera.top = d;
+        sunLight.shadow.camera.bottom = -d;
+        sunLight.shadow.camera.near = 10;
+        sunLight.shadow.camera.far = 500;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.bias = -0.0005;
+
+        scene.add(sunLight);
+    }
+
+    // --- PROSTŘEDÍ (TRÁVA, STROMY, TRIBUNA) ---
+    function createEnvironment() {
+        // Velká travnatá plocha
+        const groundGeo = new THREE.PlaneGeometry(1600, 1600);
+        const groundMat = new THREE.MeshLambertMaterial({ color: 0x3a7d34 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.05;
+        ground.receiveShadow = true;
+        scene.add(ground);
+    }
+
+    // --- GENEROVÁNÍ ZÁVODNÍHO OKRUHU ---
+    function createTrack() {
+        // Definice uzavřené křivky okruhu (zajímavý tvar s rovinkami a zatáčkami)
+        const controlPoints = [
+            new THREE.Vector3(0, 0, 0),       // Startovní rovinka
+            new THREE.Vector3(0, 0, -110),    // Konec cílové rovinky
+            new THREE.Vector3(45, 0, -165),   // První pravá zatáčka
+            new THREE.Vector3(135, 0, -160),  // Zadní rychlá pasáž
+            new THREE.Vector3(185, 0, -90),   // Šikana vstup
+            new THREE.Vector3(145, 0, -25),   // Šikana vnitřek
+            new THREE.Vector3(190, 0, 55),    // Vlásenka nájezd
+            new THREE.Vector3(145, 0, 130),   // Vlásenka výjezd
+            new THREE.Vector3(45, 0, 125),    // Technická zatáčka
+            new THREE.Vector3(0, 0, 75)       // Nájezd na cílovou rovinku
+        ];
+
+        trackCurve = new THREE.CatmullRomCurve3(controlPoints, true, 'catmullrom', 0.5);
+        trackPoints = trackCurve.getSpacedPoints(TRACK_SEGMENTS);
+
+        // Generování geometrie asfaltu, obrubníků a mantinelů
+        const roadVertices = [];
+        const roadIndices = [];
+        const roadUVs = [];
+
+        const curbVertices = [];
+        const curbColors = [];
+        const curbIndices = [];
+
+        const barrierLeftPoints = [];
+        const barrierRightPoints = [];
+
+        const curbWidth = 1.3;
+        const barrierOffset = TRACK_WIDTH / 2 + curbWidth + 2.5;
+
+        for (let i = 0; i <= TRACK_SEGMENTS; i++) {
+            const u = (i % TRACK_SEGMENTS) / TRACK_SEGMENTS;
+            const pt = trackCurve.getPointAt(u);
+            const tangent = trackCurve.getTangentAt(u).normalize();
+            // Normála v rovině XZ (kolmice na směr jízdy)
+            const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+
+            const halfW = TRACK_WIDTH / 2;
+
+            // Body asfaltu (levý a pravý okraj)
+            const pLeft = pt.clone().addScaledVector(normal, -halfW);
+            const pRight = pt.clone().addScaledVector(normal, halfW);
+
+            roadVertices.push(pLeft.x, 0.02, pLeft.z);
+            roadVertices.push(pRight.x, 0.02, pRight.z);
+            roadUVs.push(0, i * 0.2, 1, i * 0.2);
+
+            // Body obrubníků (vnější hrany)
+            const cLeftOut = pt.clone().addScaledVector(normal, -(halfW + curbWidth));
+            const cRightOut = pt.clone().addScaledVector(normal, (halfW + curbWidth));
+
+            // Střídání červené a bílé barvy obrubníků
+            const isRed = Math.floor(i / 2) % 2 === 0;
+            const r = isRed ? 0.85 : 0.95;
+            const g = isRed ? 0.15 : 0.95;
+            const b = isRed ? 0.15 : 0.95;
+
+            // Levý obrubník (2 vrcholy)
+            curbVertices.push(cLeftOut.x, 0.04, cLeftOut.z);
+            curbVertices.push(pLeft.x, 0.04, pLeft.z);
+            curbColors.push(r, g, b, r, g, b);
+
+            // Pravý obrubník (2 vrcholy)
+            curbVertices.push(pRight.x, 0.04, pRight.z);
+            curbVertices.push(cRightOut.x, 0.04, cRightOut.z);
+            curbColors.push(r, g, b, r, g, b);
+
+            if (i < TRACK_SEGMENTS) {
+                const base = i * 2;
+                roadIndices.push(base, base + 1, base + 2);
+                roadIndices.push(base + 1, base + 3, base + 2);
+
+                const cBase = i * 4;
+                // Levý obrubník trojúhelníky
+                curbIndices.push(cBase, cBase + 1, cBase + 4);
+                curbIndices.push(cBase + 1, cBase + 5, cBase + 4);
+                // Pravý obrubník trojúhelníky
+                curbIndices.push(cBase + 2, cBase + 3, cBase + 6);
+                curbIndices.push(cBase + 3, cBase + 7, cBase + 6);
+
+                // Uložení pozic pro mantinely (každý 3. segment)
+                if (i % 3 === 0) {
+                    barrierLeftPoints.push({
+                        pos: pt.clone().addScaledVector(normal, -barrierOffset),
+                        tangent: tangent.clone()
+                    });
+                    barrierRightPoints.push({
+                        pos: pt.clone().addScaledVector(normal, barrierOffset),
+                        tangent: tangent.clone()
+                    });
+                }
+            }
+        }
+
+        // Vytvoření Meshe silnice (asfalt)
+        const roadGeo = new THREE.BufferGeometry();
+        roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(roadVertices, 3));
+        roadGeo.setAttribute('uv', new THREE.Float32BufferAttribute(roadUVs, 2));
+        roadGeo.setIndex(roadIndices);
+        roadGeo.computeVertexNormals();
+
+        const roadMat = new THREE.MeshStandardMaterial({
+            color: 0x2b2d30,
+            roughness: 0.85,
+            metalness: 0.1
+        });
+        const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+        roadMesh.receiveShadow = true;
+        scene.add(roadMesh);
+
+        // Vytvoření Meshe obrubníků
+        const curbGeo = new THREE.BufferGeometry();
+        curbGeo.setAttribute('position', new THREE.Float32BufferAttribute(curbVertices, 3));
+        curbGeo.setAttribute('color', new THREE.Float32BufferAttribute(curbColors, 3));
+        curbGeo.setIndex(curbIndices);
+        curbGeo.computeVertexNormals();
+
+        const curbMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+        const curbMesh = new THREE.Mesh(curbGeo, curbMat);
+        curbMesh.receiveShadow = true;
+        scene.add(curbMesh);
+
+        // Startovní / cílová čára (šachovnice + brána)
+        createStartFinishLine();
+
+        // Mantinely podél trati
+        createBarriers(barrierLeftPoints, barrierRightPoints);
+
+        // Okolní dekorace (stromy a hlavní tribuna)
+        createScenery();
+    }
+
+    // --- STARTOVNÍ / CÍLOVÁ ČÁRA A BRÁNA ---
+    function createStartFinishLine() {
+        const startPt = trackCurve.getPointAt(0);
+        const startTangent = trackCurve.getTangentAt(0).normalize();
+        const angle = Math.atan2(startTangent.x, startTangent.z);
+
+        const startGroup = new THREE.Group();
+        startGroup.position.copy(startPt);
+        startGroup.rotation.y = angle;
+
+        // Šachovnicová čára na asfaltu pomocí procedurální textury
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        const sqSize = 16;
+        for (let y = 0; y < 4; y++) {
+            for (let x = 0; x < 16; x++) {
+                ctx.fillStyle = (x + y) % 2 === 0 ? '#ffffff' : '#111111';
+                ctx.fillRect(x * sqSize, y * sqSize, sqSize, sqSize);
+            }
+        }
+        const checkerTex = new THREE.CanvasTexture(canvas);
+        const lineGeo = new THREE.PlaneGeometry(TRACK_WIDTH, 3);
+        const lineMat = new THREE.MeshBasicMaterial({ map: checkerTex });
+        const lineMesh = new THREE.Mesh(lineGeo, lineMat);
+        lineMesh.rotation.x = -Math.PI / 2;
+        lineMesh.position.y = 0.03;
+        startGroup.add(lineMesh);
+
+        // Sloupy a horní nosník startovní brány
+        const pillarGeo = new THREE.BoxGeometry(1, 7, 1);
+        const pillarMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
+
+        const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
+        leftPillar.position.set(-TRACK_WIDTH / 2 - 1.5, 3.5, 0);
+        leftPillar.castShadow = true;
+        startGroup.add(leftPillar);
+
+        const rightPillar = new THREE.Mesh(pillarGeo, pillarMat);
+        rightPillar.position.set(TRACK_WIDTH / 2 + 1.5, 3.5, 0);
+        rightPillar.castShadow = true;
+        startGroup.add(rightPillar);
+
+        const bannerGeo = new THREE.BoxGeometry(TRACK_WIDTH + 4, 1.5, 1.2);
+        const bannerMat = new THREE.MeshStandardMaterial({ color: 0xef4444 });
+        const banner = new THREE.Mesh(bannerGeo, bannerMat);
+        banner.position.set(0, 6.8, 0);
+        banner.castShadow = true;
+        startGroup.add(banner);
+
+        scene.add(startGroup);
+    }
+
+    // --- MANTINELY PODÉL OKRUHU ---
+    function createBarriers(leftPts, rightPts) {
+        const barrierGeo = new THREE.BoxGeometry(0.5, 1.1, 4.8);
+        const matRed = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.6 });
+        const matWhite = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.6 });
+
+        const placeSide = (pts) => {
+            pts.forEach((item, idx) => {
+                const mesh = new THREE.Mesh(barrierGeo, idx % 2 === 0 ? matRed : matWhite);
+                mesh.position.copy(item.pos);
+                mesh.position.y = 0.55;
+                mesh.rotation.y = Math.atan2(item.tangent.x, item.tangent.z);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                scene.add(mesh);
+            });
+        };
+
+        placeSide(leftPts);
+        placeSide(rightPts);
+    }
+
+    // --- OKOLNÍ OBJEKTY (STROMY, TRIBUNA) ---
+    function createScenery() {
+        // Hlavní tribuna vedle startovní rovinky
+        const standGroup = new THREE.Group();
+        standGroup.position.set(-22, 0, -25);
+
+        const baseMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0 });
+        const seatMat = new THREE.MeshStandardMaterial({ color: 0x2563eb });
+
+        // Stupně tribuny
+        for (let i = 0; i < 4; i++) {
+            const step = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1 + i * 1.2, 55), i % 2 === 0 ? baseMat : seatMat);
+            step.position.set(-i * 2.2, (1 + i * 1.2) / 2, 0);
+            step.castShadow = true;
+            step.receiveShadow = true;
+            standGroup.add(step);
+        }
+
+        // Střecha tribuny
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(11, 0.5, 57), roofMat);
+        roof.position.set(-4, 8.5, 0);
+        roof.rotation.z = -0.15;
+        roof.castShadow = true;
+        standGroup.add(roof);
+
+        scene.add(standGroup);
+
+        // Generování stromů v bezpečné vzdálenosti od trati
+        const trunkGeo = new THREE.CylinderGeometry(0.4, 0.6, 3, 7);
+        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
+        const leavesGeo = new THREE.ConeGeometry(2.8, 7, 7);
+        const leavesMat = new THREE.MeshLambertMaterial({ color: 0x1e5631 });
+
+        for (let i = 0; i < 160; i++) {
+            const x = (Math.random() - 0.5) * 520;
+            const z = (Math.random() - 0.5) * 520;
+            const candidate = new THREE.Vector3(x, 0, z);
+
+            // Kontrola, zda strom nestojí na trati nebo příliš blízko ní
+            let tooClose = false;
+            for (let j = 0; j < trackPoints.length; j += 3) {
+                if (candidate.distanceTo(trackPoints[j]) < TRACK_WIDTH + 10) {
+                    tooClose = true;
+                    break;
+                }
+            }
+            // Kontrola kolize s tribunou
+            if (x > -40 && x < -10 && z > -60 && z < 10) tooClose = true;
+
+            if (!tooClose) {
+                const tree = new THREE.Group();
+                const scale = 0.8 + Math.random() * 0.8;
+
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.y = 1.5;
+                trunk.castShadow = true;
+                tree.add(trunk);
+
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                leaves.position.y = 5.5;
+                leaves.castShadow = true;
+                tree.add(leaves);
+
+                tree.position.copy(candidate);
+                tree.scale.set(scale, scale, scale);
+                scene.add(tree);
+            }
+        }
+    }
+
+    // --- VYTVOŘENÍ 3D AUTA ZE ZÁKLADNÍCH TVARŮ ---
+    function createCar() {
+        carGroup = new THREE.Group();
+
+        // Materiály auta
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.3, metalness: 0.4 }); // Sportovní červená
+        const cabinMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.1, metalness: 0.8 }); // Tmavá skla
+        const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+        const rimMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.7, roughness: 0.2 });
+
+        // 1. Hlavní spodní karoserie (podvozek + kapota)
+        const chassisGeo = new THREE.BoxGeometry(2.1, 0.65, 4.4);
+        const chassis = new THREE.Mesh(chassisGeo, bodyMat);
+        chassis.position.y = 0.65;
+        chassis.castShadow = true;
+        chassis.receiveShadow = true;
+        carGroup.add(chassis);
+
+        // Závodní bílý pruh přes kapotu
+        const stripeGeo = new THREE.BoxGeometry(0.5, 0.67, 4.42);
+        const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+        stripe.position.y = 0.65;
+        carGroup.add(stripe);
+
+        // 2. Kabina (horní část)
+        const cabinGeo = new THREE.BoxGeometry(1.65, 0.55, 2.1);
+        const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+        cabin.position.set(0, 1.2, -0.2);
+        cabin.castShadow = true;
+        carGroup.add(cabin);
+
+        // 3. Zadní přítlačné křídlo (spoiler)
+        const wingGeo = new THREE.BoxGeometry(2.1, 0.12, 0.45);
+        const wing = new THREE.Mesh(wingGeo, bodyMat);
+        wing.position.set(0, 1.35, -2.0);
+        wing.castShadow = true;
+        carGroup.add(wing);
+
+        const strutGeo = new THREE.BoxGeometry(0.12, 0.4, 0.25);
+        const strutL = new THREE.Mesh(strutGeo, cabinMat);
+        strutL.position.set(-0.7, 1.15, -2.0);
+        const strutR = new THREE.Mesh(strutGeo, cabinMat);
+        strutR.position.set(0.7, 1.15, -2.0);
+        carGroup.add(strutL, strutR);
+
+        // 4. Přední světlomety a zadní brzdová světla
+        const headLightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+        const tailLightMat = new THREE.MeshBasicMaterial({ color: 0xdc2626 });
+
+        const hlGeo = new THREE.BoxGeometry(0.45, 0.18, 0.1);
+        const hlLeft = new THREE.Mesh(hlGeo, headLightMat);
+        hlLeft.position.set(-0.7, 0.7, 2.21);
+        const hlRight = new THREE.Mesh(hlGeo, headLightMat);
+        hlRight.position.set(0.7, 0.7, 2.21);
+        carGroup.add(hlLeft, hlRight);
+
+        const tlLeft = new THREE.Mesh(hlGeo, tailLightMat);
+        tlLeft.position.set(-0.7, 0.75, -2.21);
+        const tlRight = new THREE.Mesh(hlGeo, tailLightMat);
+        tlRight.position.set(0.7, 0.75, -2.21);
+        carGroup.add(tlLeft, tlRight);
+
+        // 5. Kola (přední kola mají pivoty pro zatáčení)
+        function buildWheel() {
+            const wGroup = new THREE.Group();
+            const tireGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.35, 20);
+            tireGeo.rotateZ(Math.PI / 2);
+            const tire = new THREE.Mesh(tireGeo, wheelMat);
+            tire.castShadow = true;
+            wGroup.add(tire);
+
+            const rimGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.37, 12);
+            rimGeo.rotateZ(Math.PI / 2);
+            const rim = new THREE.Mesh(rimGeo, rimMat);
+            wGroup.add(rim);
+
+            wheelMeshes.push(wGroup);
+            return wGroup;
+        }
+
+        // Přední levé kolo (+X je vlevo při pohledu zepředu, -X vpravo; auto míří do +Z)
+        frontLeftWheelPivot = new THREE.Group();
+        frontLeftWheelPivot.position.set(1.1, 0.42, 1.35);
+        frontLeftWheelPivot.add(buildWheel());
+        carGroup.add(frontLeftWheelPivot);
+
+        // Přední pravé kolo
+        frontRightWheelPivot = new THREE.Group();
+        frontRightWheelPivot.position.set(-1.1, 0.42, 1.35);
+        frontRightWheelPivot.add(buildWheel());
+        carGroup.add(frontRightWheelPivot);
+
+        // Zadní kola
+        const rearLeftWheel = buildWheel();
+        rearLeftWheel.position.set(1.1, 0.42, -1.35);
+        carGroup.add(rearLeftWheel);
+
+        const rearRightWheel = buildWheel();
+        rearRightWheel.position.set(-1.1, 0.42, -1.35);
+        carGroup.add(rearRightWheel);
+
+        scene.add(carGroup);
+    }
+
+    // --- RESET AUTA NA START ---
+    function resetCarToStart() {
+        const startPt = trackCurve.getPointAt(0);
+        const startTangent = trackCurve.getTangentAt(0).normalize();
+
+        carState.position.copy(startPt);
+        carState.position.y = 0;
+        carState.heading = Math.atan2(startTangent.x, startTangent.z);
+        carState.speed = 0;
+        carState.steeringAngle = 0;
+
+        carGroup.position.copy(carState.position);
+        carGroup.rotation.y = carState.heading;
+
+        // Okamžité nastavení kamery za auto
+        const forward = new THREE.Vector3(Math.sin(carState.heading), 0, Math.cos(carState.heading));
+        cameraCurrentPos.copy(carState.position).addScaledVector(forward, -10).add(new THREE.Vector3(0, 4.5, 0));
+        cameraCurrentLookAt.copy(carState.position).addScaledVector(forward, 8);
+        camera.position.copy(cameraCurrentPos);
+        camera.lookAt(cameraCurrentLookAt);
+    }
+
+    // --- OVLÁDÁNÍ (KLÁVESNICE + DOTYK) ---
+    function setupInputs() {
+        window.addEventListener('keydown', (e) => {
+            switch (e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    keys.forward = true;
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    keys.backward = true;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    keys.left = true;
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    keys.right = true;
+                    break;
+                case 'Space':
+                    keys.handbrake = true;
+                    e.preventDefault();
+                    break;
+                case 'KeyR':
+                    resetCarToStart();
+                    showNotification('Pozice resetována');
+                    break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            switch (e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    keys.forward = false;
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    keys.backward = false;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    keys.left = false;
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    keys.right = false;
+                    break;
+                case 'Space':
+                    keys.handbrake = false;
+                    break;
+            }
+        });
+
+        // Dotykové ovládání pro mobily
+        const bindTouch = (id, keyName) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            const start = (e) => { e.preventDefault(); keys[keyName] = true; btn.classList.add('active'); };
+            const end = (e) => { e.preventDefault(); keys[keyName] = false; btn.classList.remove('active'); };
+            btn.addEventListener('touchstart', start, { passive: false });
+            btn.addEventListener('touchend', end, { passive: false });
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', end);
+            btn.addEventListener('mouseleave', end);
+        };
+
+        bindTouch('btn-gas', 'forward');
+        bindTouch('btn-brake', 'backward');
+        bindTouch('btn-left', 'left');
+        bindTouch('btn-right', 'right');
+
+        const resetBtn = document.getElementById('btn-reset');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                resetCarToStart();
+                showNotification('Pozice resetována');
+            });
+        }
+    }
+
+    // --- FYZIKA JÍZDY A POHYB AUTA ---
+    function updateCarPhysics(dt) {
+        // Zjištění vzdálenosti od středu trati (pro detekci trávy a kolize s mantinely)
+        const trackInfo = getClosestTrackInfo(carState.position);
+        const isOffRoad = trackInfo.distance > (TRACK_WIDTH / 2 + 1.2);
+        const maxAllowedDist = TRACK_WIDTH / 2 + 3.2; // Poloha mantinelů
+
+        // 1. Zrychlení, brzdění a couvání
+        if (keys.handbrake) {
+            // Ruční brzda prudce zpomaluje
+            if (Math.abs(carState.speed) > 0.5) {
+                carState.speed -= Math.sign(carState.speed) * carState.braking * 1.4 * dt;
+            } else {
+                carState.speed = 0;
+            }
+        } else if (keys.forward) {
+            if (carState.speed < 0) {
+                // Brzdění při couvání
+                carState.speed += carState.braking * dt;
+            } else {
+                // Zrychlování vpřed
+                const currentMax = isOffRoad ? carState.maxSpeed * 0.55 : carState.maxSpeed;
+                carState.speed = Math.min(currentMax, carState.speed + carState.acceleration * dt);
+            }
+        } else if (keys.backward) {
+            if (carState.speed > 0.5) {
+                // Brzdění při jízdě vpřed
+                carState.speed -= carState.braking * dt;
+            } else {
+                // Couvání
+                carState.speed = Math.max(carState.maxReverseSpeed, carState.speed - (carState.acceleration * 0.7) * dt);
+            }
+        } else {
+            // Přirozené zpomalování třením
+            const friction = isOffRoad ? carState.offRoadFriction : carState.friction;
+            if (Math.abs(carState.speed) > 0.2) {
+                carState.speed -= Math.sign(carState.speed) * friction * dt;
+            } else {
+                carState.speed = 0;
+            }
+        }
+
+        // Dodatečné zpomalení na trávě při vysoké rychlosti
+        if (isOffRoad && Math.abs(carState.speed) > carState.maxSpeed * 0.55) {
+            carState.speed -= Math.sign(carState.speed) * carState.offRoadFriction * dt;
+        }
+
+        // 2. Zatáčení a animace předních kol
+        const targetSteer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+        const maxSteerAngle = 0.45; // radiány (~25 stupňů)
+        carState.steeringAngle = THREE.MathUtils.lerp(
+            carState.steeringAngle,
+            targetSteer * maxSteerAngle,
+            10 * dt
+        );
+
+        // Vizuální natočení předních kol
+        frontLeftWheelPivot.rotation.y = carState.steeringAngle;
+        frontRightWheelPivot.rotation.y = carState.steeringAngle;
+
+        // Změna směru auta (pouze pokud se pohybuje)
+        if (Math.abs(carState.speed) > 0.3) {
+            const reverseSign = carState.speed >= 0 ? 1 : -1;
+            // Faktor citlivosti řízení podle rychlosti
+            const speedFactor = Math.min(1, Math.abs(carState.speed) / 12);
+            const driftBonus = keys.handbrake ? 1.35 : 1.0;
+            carState.heading += carState.steeringAngle * carState.turnSpeed * speedFactor * reverseSign * driftBonus * dt;
+        }
+
+        // 3. Výpočet nové pozice
+        const velocityX = Math.sin(carState.heading) * carState.speed;
+        const velocityZ = Math.cos(carState.heading) * carState.speed;
+
+        carState.position.x += velocityX * dt;
+        carState.position.z += velocityZ * dt;
+
+        // 4. Kolize s mantinely (udrží auto uvnitř okruhu)
+        const updatedInfo = getClosestTrackInfo(carState.position);
+        if (updatedInfo.distance > maxAllowedDist) {
+            const pushDir = updatedInfo.closestPoint.clone().sub(carState.position).normalize();
+            const overlap = updatedInfo.distance - maxAllowedDist;
+            carState.position.addScaledVector(pushDir, overlap);
+            // Ztráta části rychlosti při nárazu do mantinelu
+            carState.speed *= 0.82;
+        }
+
+        // 5. Aktualizace 3D modelu auta a rotace kol
+        carGroup.position.copy(carState.position);
+        carGroup.rotation.y = carState.heading;
+
+        // Jemný náklon karoserie při zatáčení (body roll)
+        const rollAngle = -carState.steeringAngle * (carState.speed / carState.maxSpeed) * 0.14;
+        carGroup.rotation.z = THREE.MathUtils.lerp(carGroup.rotation.z, rollAngle, 8 * dt);
+
+        // Otáčení kol podle ujeté vzdálenosti
+        const wheelRotationDelta = (carState.speed * dt) / 0.42;
+        wheelMeshes.forEach(w => {
+            w.children[0].rotation.x += wheelRotationDelta;
+            w.children[1].rotation.x += wheelRotationDelta;
+        });
+
+        // 6. Kontrola průjezdu checkpointy a cílovou čárou
+        updateLapProgress(updatedInfo.progress);
+    }
+
+    // --- VÝPOČET NEJBLIŽŠÍHO BODU NA TRATI ---
+    function getClosestTrackInfo(pos) {
+        let minDistSq = Infinity;
+        let closestIdx = 0;
+
+        for (let i = 0; i < trackPoints.length; i++) {
+            const dx = pos.x - trackPoints[i].x;
+            const dz = pos.z - trackPoints[i].z;
+            const dSq = dx * dx + dz * dz;
+            if (dSq < minDistSq) {
+                minDistSq = dSq;
+                closestIdx = i;
+            }
+        }
+
+        return {
+            distance: Math.sqrt(minDistSq),
+            closestPoint: trackPoints[closestIdx],
+            progress: closestIdx / trackPoints.length // Hodnota 0.0 až 1.0 po okruhu
+        };
+    }
+
+    // --- SYSTÉM KOL A ČASOMÍRY ---
+    function updateLapProgress(progress) {
+        // Checkpoint 1 (cca 33% trati)
+        if (progress > 0.25 && progress < 0.45) {
+            raceState.passedCheckpoint1 = true;
+        }
+        // Checkpoint 2 (cca 70% trati, vyžaduje projetí checkpointu 1)
+        if (raceState.passedCheckpoint1 && progress > 0.65 && progress < 0.85) {
+            raceState.passedCheckpoint2 = true;
+        }
+
+        // Překročení cílové čáry (přechod z konce okruhu > 0.9 na začátek < 0.1)
+        if (raceState.passedCheckpoint1 && raceState.passedCheckpoint2 && progress < 0.1 && raceState.lastProgress > 0.9) {
+            const now = performance.now();
+            const lapDuration = (now - raceState.lapStartTime) / 1000;
+
+            let msg = `Kolo ${raceState.lap}: ${formatTime(lapDuration)}`;
+
+            // Kontrola nejlepšího času
+            if (raceState.bestLapTime === null || lapDuration < raceState.bestLapTime) {
+                raceState.bestLapTime = lapDuration;
+                document.getElementById('best-time').textContent = formatTime(lapDuration);
+                msg = `Nový rekord! ${formatTime(lapDuration)}`;
+            }
+
+            showNotification(msg);
+
+            // Příprava na další kolo
+            raceState.lap++;
+            raceState.lapStartTime = now;
+            raceState.passedCheckpoint1 = false;
+            raceState.passedCheckpoint2 = false;
+            document.getElementById('lap-count').textContent = raceState.lap;
+        }
+
+        raceState.lastProgress = progress;
+    }
+
+    // --- DYNAMICKÁ KAMERA (CHASE CAMERA) ---
+    function updateCamera(dt) {
+        const forward = new THREE.Vector3(Math.sin(carState.heading), 0, Math.cos(carState.heading));
+
+        // Dynamické oddálení kamery a změna FOV podle rychlosti pro lepší pocit z rychlosti
+        const speedRatio = Math.max(0, carState.speed / carState.maxSpeed);
+        const followDist = 8.5 + speedRatio * 2.2;
+        const followHeight = 3.8 + speedRatio * 0.6;
+
+        const targetCamPos = carState.position.clone()
+            .addScaledVector(forward, -followDist)
+            .add(new THREE.Vector3(0, followHeight, 0));
+
+        const targetLookAt = carState.position.clone()
+            .addScaledVector(forward, 9)
+            .add(new THREE.Vector3(0, 1.2, 0));
+
+        // Plynulá interpolace pozice kamery
+        cameraCurrentPos.lerp(targetCamPos, 1 - Math.exp(-8 * dt));
+        cameraCurrentLookAt.lerp(targetLookAt, 1 - Math.exp(-12 * dt));
+
+        camera.position.copy(cameraCurrentPos);
+        camera.lookAt(cameraCurrentLookAt);
+
+        // Dynamické zorné pole (FOV)
+        const targetFov = 60 + speedRatio * 14;
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 5 * dt);
+        camera.updateProjectionMatrix();
+    }
+
+    // --- AKTUALIZACE HUD ---
+    function updateHUD() {
+        // Převod herní rychlosti na realistické km/h
+        const kmh = Math.round(Math.abs(carState.speed) * 3.6);
+        document.getElementById('speed-value').textContent = kmh;
+
+        // Aktuální čas kola
+        const elapsed = (performance.now() - raceState.lapStartTime) / 1000;
+        document.getElementById('current-time').textContent = formatTime(elapsed);
+    }
+
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        const hundredths = Math.floor((seconds % 1) * 100);
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
+    }
+
+    let notifTimeout;
+    function showNotification(text) {
+        const el = document.getElementById('notification');
+        el.textContent = text;
+        el.classList.add('show');
+        clearTimeout(notifTimeout);
+        notifTimeout = setTimeout(() => {
+            el.classList.remove('show');
+        }, 2800);
+    }
+
+    // --- RESIZE OKNA ---
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // --- HLAVNÍ SMYČKA HRY ---
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // Omezení deltaTime proti velkým skokům při přepnutí záložky
+        const dt = Math.min(clock.getDelta(), 0.05);
+
+        updateCarPhysics(dt);
+        updateCamera(dt);
+        updateHUD();
+
+        renderer.render(scene, camera);
+    }
+
+    // Spuštění po načtení okna
+    window.onload = function () {
+        init();
+        animate();
+    };
+</script>
+</body>
+</html>
